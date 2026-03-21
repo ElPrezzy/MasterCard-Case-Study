@@ -1,0 +1,163 @@
+---
+title: "MasterClothe Scenario 2"
+author: "Kailani Niziol"
+date: "`r Sys.Date()`"
+output:
+
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+#customer behavior 
+
+#excel data
+customers  <- read_excel("MasterFiles_v2.xlsx", sheet = "Customer Master")
+stores      <- read_excel("MasterFiles_v2.xlsx", sheet = "Store Master")
+competitors <- read_excel("MasterFiles_v2.xlsx", sheet = "Competitor Master")
+df          <- read.csv("Scenario2_Data.csv")
+
+#date formatting
+stores$opening_date     <- as.Date(stores$opening_date)
+competitors$opening_day <- as.Date(competitors$opening_day)
+df$date                 <- as.Date(df$date)
+
+#customer info
+df <- df %>%
+  left_join(customers, by = "customer_id")
+
+#competitor opening date
+first_comp_date <- min(competitors$opening_day)
+
+#customer history 
+customer_history <- df %>%
+  group_by(customer_id) %>%
+  summarise(
+    first_purchase  = min(date),
+    last_purchase   = max(date),
+    total_visits    = n(),
+    shops_at_master = any(store_id %in% stores$store_id),
+    num_stores      = n_distinct(store_id),
+    .groups         = "drop"
+  ) %>%
+  mutate(
+    customer_type = ifelse(first_purchase < first_comp_date,
+                           "Long Term", "New Customer"),
+    
+    shopping_type = ifelse(num_stores == 1,
+                           "Master Clothe Only",
+                           "Other Stores")
+  ) %>%
+  left_join(select(customers, customer_id, loyalty, income),
+            by = "customer_id")
+
+#customer income grouping 
+customer_history <- customer_history %>%
+  mutate(income_group = cut(income,
+                            breaks = c(0, 40000, 80000,
+                                       120000, 200000, Inf),
+                            labels = c("Under $40k", "$40k-$80k",
+                                       "$80k-$120k", "$120k-$200k",
+                                       "$200k+")))
+
+
+#plot for average of loyalty by income group
+income_loyalty <- customer_history %>%
+  group_by(income_group) %>%
+  summarise(
+    avg_loyalty = mean(loyalty, na.rm = TRUE),
+    count       = n()
+  ) %>%
+  filter(!is.na(income_group))
+
+ggplot(income_loyalty,
+       aes(x = income_group, y = avg_loyalty, fill = income_group)) +
+  geom_bar(stat = "identity", width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = round(avg_loyalty, 1)),
+            vjust = -0.5, size = 4.5, fontface = "bold") +
+  scale_fill_brewer(palette = "Pastel1") +
+  ylim(0, max(income_loyalty$avg_loyalty) * 1.2) +
+  labs(title    = "Average Loyalty Score by Income Group",
+       x        = "Income Group",
+       y        = "Average Loyalty Score") +
+  theme_minimal()
+
+#plot for shopping preference by income group
+income_preference <- customer_history %>%
+  group_by(income_group, shopping_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(income_group) %>%
+  mutate(pct = round(count / sum(count) * 100, 1)) %>%
+  filter(!is.na(income_group))
+
+ggplot(income_preference,
+       aes(x = income_group, y = pct, fill = shopping_type)) +
+  geom_bar(stat     = "identity",
+           position = "dodge",
+           width    = 0.6) +
+  geom_text(aes(label = paste0(pct, "%")),
+            position = position_dodge(width = 0.6),
+            vjust    = -0.5,
+            size     = 3.5,
+            fontface = "bold") +
+  scale_fill_manual(values = c("Master Clothe Only" = "lightsteelblue3",
+                               "Other Stores"        = "thistle3")) +
+  ylim(0, 100) +
+  labs(title = "Shopping Preference Based off Income",
+       x     = "Income Group",
+       y     = "Percentage of Customers",
+       fill  = "") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+#age plots
+
+path <- file.choose()
+
+#excle data
+customers <- read_excel("MasterFiles_v2.xlsx", sheet = "Customer Master")
+
+#sorting age group 
+customers <- customers %>%
+  mutate(age_group = cut(age,
+                         breaks = c(0, 25, 35, 45, 55, 65, 75, 100),
+                         labels = c("18-25", "26-35", "36-45",
+                                    "46-55", "56-65", "66-75",
+                                "75 and older")))
+
+age_loyalty <- customers %>%
+  group_by(age_group) %>%
+  summarise(
+    avg_loyalty = mean(loyalty, na.rm = TRUE),
+    count       = n()
+  )
+
+#plot for customer by age group 
+ ggplot(age_loyalty,
+             aes(x = age_group, y = count, fill = age_group)) +
+  geom_bar(stat = "identity", width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = count),
+            vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_brewer(palette = "Pastel1") +
+  ylim(0, max(age_loyalty$count) * 1.2) +
+  labs(title    = "Number of Customers by Age Group",
+       x        = "Age Group",
+       y        = "Number of Customers") +
+  theme_minimal() 
+
+```
+
+```
